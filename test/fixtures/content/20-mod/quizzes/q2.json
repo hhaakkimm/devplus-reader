@@ -1,0 +1,6 @@
+{
+  "title": "Квиз 2",
+  "questions": [
+    { "type": "true_false", "level": "senior", "question": "Верно?", "explanation": "Нет", "answer": false }
+  ]
+}

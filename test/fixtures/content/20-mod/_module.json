@@ -1,0 +1,5 @@
+{
+  "title": "Модуль",
+  "description": "Описание",
+  "sections": [{ "title": "Вторая часть", "from": 2 }]
+}

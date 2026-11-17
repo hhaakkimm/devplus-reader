@@ -1,0 +1,8 @@
+{
+  "title": "Квиз 1",
+  "source": "https://example.com/q1",
+  "questions": [
+    { "type": "true_false", "level": "junior", "question": "Верно?", "explanation": "Да", "answer": true },
+    { "type": "choice", "level": "mid", "question": "Выбери", "explanation": "Б", "options": ["а", "б", "в", "г"], "answer": 1 }
+  ]
+}

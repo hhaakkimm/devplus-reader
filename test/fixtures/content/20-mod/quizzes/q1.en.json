@@ -1,0 +1,7 @@
+{
+  "title": "Quiz 1",
+  "questions": [
+    { "type": "true_false", "level": "junior", "question": "True?", "explanation": "Yes", "answer": true },
+    { "type": "choice", "level": "mid", "question": "Pick", "explanation": "B", "options": ["a", "b", "c", "d"], "answer": 1 }
+  ]
+}
