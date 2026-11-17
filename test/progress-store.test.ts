@@ -343,7 +343,7 @@ describe("createStore: merge on write", () => {
     const b = createStore(fake(seed), cloud, clock(200));
     await a.load(["m"], []);
     await b.load(["m"], []); // B's snapshot is now stale for X
-    await a.markLesson("m", "x", true); // X done at 100? old 10 -> max(100, 11)
+    await a.markLesson("m", "x", true); // x: max(100, 10+1) = 100
     await b.markLesson("m", "y", false); // Y un-marked at 200
     const want = { x: 100, y: -200 };
     expect(JSON.parse(cloud.data["done-m"])).toEqual(want);
