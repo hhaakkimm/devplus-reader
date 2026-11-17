@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { BestScore } from "@/components/best-score";
 import { LangToggle } from "@/components/lang-toggle";
 import { QuizRunner } from "@/components/quiz";
 import { getQuizCatalog } from "@/lib/data";
@@ -46,22 +47,25 @@ export default async function QuizPage({
           <LangToggle lang={lang} path={`/quizzes/${quiz.slug}/`} />
         )}
       </div>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {fill(t(lang, "quizQuestions"), { n: quiz.questions.length })}
-        {quiz.source && (
-          <>
-            {" · "}
-            <a
-              href={quiz.source}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline"
-            >
-              {t(lang, "sourceLink")}
-            </a>
-            {lang === "ru" && ` (${t(lang, "translation")})`}
-          </>
-        )}
+      <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+        <span>
+          {fill(t(lang, "quizQuestions"), { n: quiz.questions.length })}
+          {quiz.source && (
+            <>
+              {" · "}
+              <a
+                href={quiz.source}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                {t(lang, "sourceLink")}
+              </a>
+              {lang === "ru" && ` (${t(lang, "translation")})`}
+            </>
+          )}
+        </span>
+        <BestScore lang={lang} quiz={quiz.slug} />
       </p>
       <div className="mt-6">
         <QuizRunner quiz={quiz} lang={lang} />

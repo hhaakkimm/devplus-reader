@@ -220,6 +220,30 @@ test("a quiz is played from the catalog and its best result survives a reload", 
       .getByRole("region", { name: MODULE })
       .getByText(`лучший результат ${score} из 15`),
   ).toBeVisible();
+
+  // The quiz page itself shows the best result too, also after a reload.
+  await page.goto(QUIZ);
+  await expect(page.getByText(`лучший результат ${score} из 15`)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText(`лучший результат ${score} из 15`)).toBeVisible();
+});
+
+test("the quizzes catalog toggles between Russian and English", async ({
+  page,
+}) => {
+  await page.goto("ru/quizzes/");
+  await page
+    .getByRole("navigation", { name: "Язык материала" })
+    .getByRole("link", { name: "EN" })
+    .click();
+  await expect(page).toHaveURL(/en\/quizzes\/$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Quizzes");
+  await page
+    .getByRole("navigation", { name: "Material language" })
+    .getByRole("link", { name: "RU" })
+    .click();
+  await expect(page).toHaveURL(/ru\/quizzes\/$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Квизы");
 });
 
 test("an English quiz has English questions and toggles to Russian and back", async ({

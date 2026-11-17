@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BestScore } from "@/components/best-score";
+import { LangToggle } from "@/components/lang-toggle";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getQuizCatalog } from "@/lib/data";
 import { fill, isLang, t } from "@/lib/i18n";
@@ -23,7 +24,10 @@ export default async function QuizzesPage({
   const catalog = await getQuizCatalog();
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-3xl font-semibold">{t(lang, "quizzes")}</h1>
+      <div className="flex items-start justify-between gap-3">
+        <h1 className="text-3xl font-semibold">{t(lang, "quizzes")}</h1>
+        <LangToggle lang={lang} path="/quizzes/" />
+      </div>
       <p className="mt-2 text-muted-foreground">{t(lang, "quizzesIntro")}</p>
       {catalog.length === 0 && (
         <p className="mt-6 text-muted-foreground">{t(lang, "noQuizzes")}</p>
