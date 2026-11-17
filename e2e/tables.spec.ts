@@ -5,6 +5,8 @@ const LESSONS = [
   "lessons/lld/problem-breakdowns-rate-limiter/",
   "lessons/ai-coding/problem-breakdowns-maximize-unique-chars/",
   "lessons/lld/problem-breakdowns-inventory-management/",
+  // Four of six columns are empty here: empty cells must not leave blank strips in a card.
+  "lessons/sd-prep/how-to-prepare/",
 ];
 const LANGS = ["ru", "en"];
 
@@ -23,6 +25,7 @@ type TableFacts = {
   display: string;
   theadDisplay: string;
   rows: number;
+  emptyShown: number;
 };
 
 // Per table: does its container scroll, does every body cell carry the label of its column,
@@ -53,6 +56,9 @@ const facts = (page: Page) =>
         display: getComputedStyle(table).display,
         theadDisplay: getComputedStyle(table.tHead!).display,
         rows: table.querySelectorAll("tbody tr").length,
+        emptyShown: [...table.querySelectorAll("td:empty")].filter(
+          (td) => getComputedStyle(td).display !== "none",
+        ).length,
       };
     }),
   );
@@ -69,6 +75,7 @@ for (const lang of LANGS)
         for (const t of tables) {
           expect(t.innerScroll).toBe(false);
           expect(t.mismatched).toEqual([]);
+          expect(t.emptyShown).toBe(0);
           expect(t.widest).toBeLessThanOrEqual(t.container);
         }
         expect(

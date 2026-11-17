@@ -91,7 +91,7 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
       role="cell"
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 max-sm:block max-sm:px-0 max-sm:py-1.5 max-sm:break-words max-sm:whitespace-normal max-sm:before:block max-sm:before:text-xs max-sm:before:text-muted-foreground max-sm:before:content-[attr(data-label)]",
+        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 max-sm:block max-sm:px-0 max-sm:py-1.5 max-sm:empty:hidden max-sm:break-words max-sm:whitespace-normal max-sm:before:block max-sm:before:text-xs max-sm:before:text-muted-foreground max-sm:before:content-[attr(data-label)]",
         className,
       )}
       {...props}
