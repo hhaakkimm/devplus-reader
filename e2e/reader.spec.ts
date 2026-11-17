@@ -134,3 +134,13 @@ test("a mark survives switching the language and a reload", async ({
   await expect(page.getByRole("button", { name: "Unmark" })).toBeVisible();
   await expect(await navCounter(page, "en")).toHaveText(/^1\//);
 });
+
+// The server HTML is what runs before hydration: a click on an enabled button then would hit no store and be lost.
+test("the mark button is disabled in the server HTML", async ({ request }) => {
+  const res = await request.get(LESSON);
+  const html = await res.text();
+  // `\sdisabled` is the attribute (not the `disabled:` tailwind variants inside class).
+  expect(html).toMatch(
+    /<button[^>]*\sdisabled(=""|[\s>])[^>]*>Отметить пройденным/,
+  );
+});

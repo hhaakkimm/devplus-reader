@@ -94,7 +94,7 @@ export function ProgressProvider({
 
   const value = useMemo<Progress>(
     () => ({
-      ready: store !== null,
+      ready: store !== undefined,
       synced,
       doneSet,
       isDone: (slug) => doneSet(slug.split("/")[0]).has(slug),
