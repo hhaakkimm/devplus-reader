@@ -1,9 +1,10 @@
 import type { NextConfig } from "next";
+import { BASE_PATH } from "./lib/links";
 
 const nextConfig: NextConfig = {
   output: "export",
   trailingSlash: true,
-  basePath: "/devplus-reader",
+  basePath: BASE_PATH,
   images: { unoptimized: true },
   turbopack: {
     rules: {
