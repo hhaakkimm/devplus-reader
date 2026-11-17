@@ -334,6 +334,90 @@ describe("createStore: load racing with writes", () => {
   });
 });
 
+// A KV whose set stays pending until `release()`; the value is stored at once so a read sees it.
+function gatedSet(base: Fake) {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const kv: KV = {
+    get: (keys) => base.get(keys),
+    set: async (k, v) => {
+      await base.set(k, v);
+      await gate;
+    },
+  };
+  return { kv, release };
+}
+
+describe("createStore: writes during load's write-back", () => {
+  // cloud holds data the device lacks, so load has something to write back to local;
+  // local holds data the cloud lacks, so it has something to write back to the cloud.
+  const setup = () => {
+    const local = fake({
+      "done-m": '{"l":5}',
+      "quiz-m-q": "1/5",
+      lang: "ru",
+    });
+    const cloudBase = fake({ "done-m": '{"c":6}', "quiz-m-q": "2/5" });
+    const { kv, release } = gatedSet(cloudBase);
+    const store = createStore(local, kv, clock(1000));
+    return { local, cloudBase, store, release };
+  };
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("a mark made during the write-back survives in the snapshot and in both stores", async () => {
+    const { local, cloudBase, store, release } = setup();
+    const loading = store.load(["m"], ["m-q"]);
+    await tick(); // load is now stuck inside its first cloud.set
+    const marking = store.markLesson("m", "a", true);
+    release();
+    await Promise.all([loading, marking]);
+    const want = { l: 5, c: 6, a: 1000 };
+    expect(store.getSnapshot().done.m).toEqual(want);
+    expect(JSON.parse(local.data["done-m"])).toEqual(want);
+    expect(JSON.parse(cloudBase.data["done-m"])).toEqual(want);
+  });
+
+  it("a quiz result saved during the write-back survives", async () => {
+    const { local, cloudBase, store, release } = setup();
+    const loading = store.load(["m"], ["m-q"]);
+    await tick();
+    const saving = store.saveQuiz("m", "q", 5, 5);
+    release();
+    await Promise.all([loading, saving]);
+    expect(store.getSnapshot().quizzes["m-q"]).toBe("5/5");
+    expect(local.data["quiz-m-q"]).toBe("5/5");
+    expect(cloudBase.data["quiz-m-q"]).toBe("5/5");
+  });
+
+  it("a language chosen during the write-back survives", async () => {
+    const { local, cloudBase, store, release } = setup();
+    const loading = store.load(["m"], ["m-q"]);
+    await tick();
+    const setting = store.setLang("en");
+    release();
+    await Promise.all([loading, setting]);
+    expect(store.getSnapshot().lang).toBe("en");
+    expect(local.data.lang).toBe("en");
+    expect(cloudBase.data.lang).toBe("en");
+  });
+
+  it("a mark made while local.set is pending survives too", async () => {
+    const localBase = fake({ "quiz-m-q": "1/5" });
+    const { kv: local, release } = gatedSet(localBase);
+    const cloud = fake({ "done-m": '{"c":6}' });
+    const store = createStore(local, cloud, clock(1000));
+    const loading = store.load(["m"], []);
+    await tick(); // stuck in the local write-back of done-m
+    const marking = store.markLesson("m", "a", true);
+    release();
+    await Promise.all([loading, marking]);
+    const want = { c: 6, a: 1000 };
+    expect(store.getSnapshot().done.m).toEqual(want);
+    expect(JSON.parse(localBase.data["done-m"])).toEqual(want);
+    expect(JSON.parse(cloud.data["done-m"])).toEqual(want);
+  });
+});
+
 describe("createStore: merge on write", () => {
   const seed = { "done-m": '{"x":10,"y":50}' };
 

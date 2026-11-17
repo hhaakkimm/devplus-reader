@@ -196,11 +196,21 @@ export function createStore(
         // read plus write-back the cloud holds the merge of everything in the snapshot for the
         // loaded modules and quizzes, so the load's own outcome decides.
         if (cloud) setSynced(ok);
+        // The write-back above awaited, so a write may have changed `snap` meanwhile: merge
+        // into the CURRENT snapshot, synchronously with no await before setSnap. The write's
+        // own queued persist runs after this load and stores its value.
+        const finalDone = { ...snap.done };
+        for (const m of Object.keys(done))
+          finalDone[m] = mergeDone(done[m], snap.done[m] ?? {});
+        const finalQuizzes = { ...snap.quizzes };
+        for (const [q, v] of Object.entries(quizzes))
+          finalQuizzes[q] = mergeQuiz(v, snap.quizzes[q]) ?? v;
+        const finalLang = snap.lang || lang;
         setSnap({
           ...snap,
-          done: { ...snap.done, ...done },
-          quizzes: { ...snap.quizzes, ...quizzes },
-          ...(lang ? { lang } : {}),
+          done: finalDone,
+          quizzes: finalQuizzes,
+          ...(finalLang ? { lang: finalLang } : {}),
         });
         return snap;
       }),
