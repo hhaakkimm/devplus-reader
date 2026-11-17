@@ -1,0 +1,8 @@
+.next
+node_modules
+content
+out
+test-results
+pnpm-lock.yaml
+docs
+.superpowers
