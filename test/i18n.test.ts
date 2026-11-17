@@ -35,6 +35,11 @@ describe("i18n dictionary", () => {
     );
   });
 
+  it("the quiz count reads as a phrase in both languages", () => {
+    expect(fill(t("ru", "quizQuestions"), { n: 5 })).toBe("Вопросов: 5");
+    expect(fill(t("en", "quizQuestions"), { n: 5 })).toBe("5 questions");
+  });
+
   it("isLang accepts only known languages", () => {
     expect(isLang("ru")).toBe(true);
     expect(isLang("en")).toBe(true);

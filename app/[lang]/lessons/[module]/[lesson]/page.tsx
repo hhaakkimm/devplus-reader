@@ -167,16 +167,15 @@ export default async function LessonPage({
               <CardTitle>{t(lang, "checkYourself")}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-wrap items-center gap-3">
-              {/* Task 6 builds the quiz pages. */}
               <Link
                 href={`/${quizLang}/quizzes/${quiz.slug}/`}
                 className="font-medium hover:underline"
               >
-                {quiz.title}:{" "}
-                {fill(t(quizLang, "quizQuestions"), {
-                  n: quiz.questions.length,
-                })}
+                {quiz.title}
               </Link>
+              <span className="text-sm text-muted-foreground">
+                {fill(t(lang, "quizQuestions"), { n: quiz.questions.length })}
+              </span>
               <BestScore lang={lang} quiz={quiz.slug} />
             </CardContent>
           </Card>

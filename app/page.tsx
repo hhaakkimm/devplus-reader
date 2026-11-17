@@ -1,4 +1,5 @@
-// Placeholder: the client-side language picker replaces it in a later task.
+import { RootRedirect } from "@/components/root-redirect";
+
 export default function Home() {
-  return <main className="p-6">devplus reader</main>;
+  return <RootRedirect />;
 }

@@ -9,7 +9,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { getWebApp } from "@/lib/telegram";
+import { getWebApp, whenTelegram } from "@/lib/telegram";
 import { localKV, cloudKV } from "@/lib/progress/storage";
 import { createStoreHolder } from "@/lib/progress/singleton";
 import { createStore, type Snapshot } from "@/lib/progress/store";
@@ -51,10 +51,17 @@ export function ProgressProvider({
   const [store, setStore] = useState(holder.peek);
   const key = `${modules.join("|")}#${quizKeys.join("|")}`;
   useEffect(() => {
-    // The store needs the browser (Telegram.WebApp), so it cannot be created during render.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStore(holder.get());
-    holder.loadOnce(modules, quizKeys);
+    // The store needs the browser (Telegram.WebApp), and the Telegram script loads after hydration:
+    // wait until it has loaded or failed, or the store would never get CloudStorage.
+    let off = false;
+    void whenTelegram().then(() => {
+      if (off) return;
+      setStore(holder.get());
+      holder.loadOnce(modules, quizKeys);
+    });
+    return () => {
+      off = true;
+    };
     // `key` stands for the contents of the arrays: the server layout builds new ones on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
