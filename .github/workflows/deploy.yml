@@ -29,14 +29,16 @@ jobs:
           repository: hhaakkimm/devplus
           ref: main
           path: devplus
+          # без cone mode: иначе рядом лягут файлы devplus/apps/web/*.ts и сломают tsc
+          sparse-checkout-cone-mode: false
           sparse-checkout: |
-            content
-            apps/web/public/content
+            /content/
+            /apps/web/public/content/
           persist-credentials: false
 
       - run: cp -R devplus/apps/web/public/content public/content
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v4
         with:
