@@ -24,6 +24,7 @@ import { fill, isLang, LANGS, t } from "@/lib/i18n";
 import { BASE_PATH, rewriteLinks } from "@/lib/links";
 import { lessonLink, navModules } from "@/lib/nav-modules";
 import { loadQuiz } from "@/lib/quizzes";
+import { tableLabels } from "@/lib/table-labels";
 import { headingIds, type TocItem } from "@/lib/toc";
 
 export const dynamicParams = false;
@@ -55,7 +56,7 @@ export async function generateMetadata({
 // Tables stay sans and 1rem: the serif article size is too big for dense cells.
 function MdxTable(props: React.ComponentProps<"table">) {
   return (
-    <div className="not-prose my-6 rounded-lg border bg-card px-2 font-sans text-base">
+    <div className="not-prose my-6 rounded-lg border bg-card px-2 font-sans text-base max-sm:border-0 max-sm:bg-transparent max-sm:px-0">
       <Table {...props} />
     </div>
   );
@@ -96,6 +97,7 @@ export default async function LessonPage({
       mdxOptions: {
         remarkPlugins: [
           remarkGfm,
+          tableLabels(),
           headingIds(toc),
           rewriteLinks({
             lang,
