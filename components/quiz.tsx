@@ -127,6 +127,7 @@ function QuestionBody({
             <Button
               variant="outline"
               size="sm"
+              className="max-sm:size-11"
               disabled={checked || pos === 0}
               aria-label={fill(t(lang, "moveUp"), { item: q.items[item] })}
               onClick={() => move(pos, pos - 1)}
@@ -136,6 +137,7 @@ function QuestionBody({
             <Button
               variant="outline"
               size="sm"
+              className="max-sm:size-11"
               disabled={checked || pos === order.length - 1}
               aria-label={fill(t(lang, "moveDown"), { item: q.items[item] })}
               onClick={() => move(pos, pos + 1)}
@@ -178,6 +180,12 @@ function QuestionBody({
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {/* A closed select cuts a long option off; the chosen one is repeated in full. */}
+          {chosen[i] >= 0 && (
+            <p className="text-sm text-muted-foreground">
+              {q.right[chosen[i]]}
+            </p>
+          )}
         </li>
       ))}
     </ul>
