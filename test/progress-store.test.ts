@@ -272,6 +272,131 @@ describe("createStore.markLesson / saveQuiz / setLang", () => {
   });
 });
 
+// A KV whose get answers only after `release()` is called, with the data as of the call.
+function slow(base: Fake) {
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const kv: KV = {
+    // the value is read now and delivered late, like a slow network answer
+    get: async (keys) => {
+      const v = await base.get(keys);
+      await gate;
+      return v;
+    },
+    set: (k, v) => base.set(k, v),
+  };
+  return { kv, release };
+}
+
+describe("createStore: load racing with writes", () => {
+  it("a mark made while load is pending survives in the snapshot and in both stores", async () => {
+    const local = fake({ "done-m": '{"old":5}' });
+    const cloudBase = fake({ "done-m": '{"other":6}' });
+    const { kv, release } = slow(cloudBase);
+    const store = createStore(local, kv, clock(1000));
+    const loading = store.load(["m"], []);
+    const marking = store.markLesson("m", "a", true);
+    expect(store.getSnapshot().done.m).toEqual({ a: 1000 }); // visible at once
+    release();
+    await Promise.all([loading, marking]);
+    const want = { old: 5, other: 6, a: 1000 };
+    expect(store.getSnapshot().done.m).toEqual(want);
+    expect(JSON.parse(local.data["done-m"])).toEqual(want);
+    expect(JSON.parse(cloudBase.data["done-m"])).toEqual(want);
+    expect(store.synced()).toBe(true);
+  });
+
+  it("a quiz result saved while load is pending survives too", async () => {
+    const local = fake({ "quiz-m-q": "1/5" });
+    const cloudBase = fake();
+    const { kv, release } = slow(cloudBase);
+    const store = createStore(local, kv, clock());
+    const loading = store.load([], ["m-q"]);
+    const saving = store.saveQuiz("m", "q", 4, 5);
+    release();
+    await Promise.all([loading, saving]);
+    expect(store.getSnapshot().quizzes["m-q"]).toBe("4/5");
+    expect(local.data["quiz-m-q"]).toBe("4/5");
+    expect(cloudBase.data["quiz-m-q"]).toBe("4/5");
+  });
+
+  it("a language chosen while load is pending is not replaced", async () => {
+    const local = fake({ lang: "ru" });
+    const cloudBase = fake();
+    const { kv, release } = slow(cloudBase);
+    const store = createStore(local, kv, clock());
+    const loading = store.load([], []);
+    const setting = store.setLang("en");
+    release();
+    await Promise.all([loading, setting]);
+    expect(store.getSnapshot().lang).toBe("en");
+    expect(local.data.lang).toBe("en");
+  });
+});
+
+describe("createStore: merge on write", () => {
+  const seed = { "done-m": '{"x":10,"y":50}' };
+
+  it("two devices: both devices' changes end up in the cloud", async () => {
+    const cloud = fake(seed);
+    const a = createStore(fake(seed), cloud, clock(100));
+    const b = createStore(fake(seed), cloud, clock(200));
+    await a.load(["m"], []);
+    await b.load(["m"], []); // B's snapshot is now stale for X
+    await a.markLesson("m", "x", true); // X done at 100? old 10 -> max(100, 11)
+    await b.markLesson("m", "y", false); // Y un-marked at 200
+    const want = { x: 100, y: -200 };
+    expect(JSON.parse(cloud.data["done-m"])).toEqual(want);
+    expect(b.getSnapshot().done.m).toEqual(want);
+  });
+
+  it("an un-mark by A (t=300) is not overwritten by B's stale older mark (t=200)", async () => {
+    const cloud = fake(seed);
+    const a = createStore(fake(seed), cloud, clock(300));
+    const b = createStore(fake(seed), cloud, clock(200));
+    await a.load(["m"], []);
+    await b.load(["m"], []);
+    await a.markLesson("m", "y", false); // y: -300
+    await b.markLesson("m", "y", true); // stale: would write +200
+    expect(JSON.parse(cloud.data["done-m"]).y).toBe(-300);
+    expect(b.getSnapshot().done.m.y).toBe(-300);
+    expect(b.synced()).toBe(true);
+  });
+
+  it("a higher quiz result in the cloud is not lowered by a stale device", async () => {
+    const cloud = fake({ "quiz-m-q": "5/5" });
+    const b = createStore(fake(), cloud, clock());
+    await b.saveQuiz("m", "q", 2, 5);
+    expect(cloud.data["quiz-m-q"]).toBe("5/5");
+    expect(b.getSnapshot().quizzes["m-q"]).toBe("5/5");
+  });
+
+  it("with a failing cloud read: local and snapshot updated, cloud untouched, synced false, no throw", async () => {
+    const local = fake();
+    const cloud = fake({ "done-m": '{"c":9}' });
+    const store = createStore(local, cloud, clock());
+    await store.load(["m"], []);
+    cloud.sets.length = 0;
+    cloud.failGet = true;
+    await expect(store.markLesson("m", "a", true)).resolves.toBeUndefined();
+    await expect(store.saveQuiz("m", "q", 1, 2)).resolves.toBeUndefined();
+    expect(store.getSnapshot().done.m).toEqual({ c: 9, a: 1000 });
+    expect(JSON.parse(local.data["done-m"])).toEqual({ c: 9, a: 1000 });
+    expect(local.data["quiz-m-q"]).toBe("1/2");
+    expect(cloud.sets).toEqual([]);
+    expect(cloud.data["done-m"]).toBe('{"c":9}');
+    expect(store.synced()).toBe(false);
+    cloud.failGet = false;
+    await store.markLesson("m", "b", true);
+    expect(store.synced()).toBe(true);
+    expect(JSON.parse(cloud.data["done-m"])).toEqual({
+      c: 9,
+      a: 1000,
+      b: 1000,
+    });
+  });
+});
+
 describe("createStore.subscribe / getSnapshot", () => {
   it("notifies on changes, stops after unsubscribe, snapshot is stable between changes", async () => {
     const store = createStore(fake(), fake(), clock());
