@@ -20,10 +20,15 @@ const noHorizontalScroll = (page: Page) =>
   );
 
 // The module counter in the lesson's navigation (the fold above the article on a phone).
-async function navCounter(page: Page) {
-  await page.getByRole("complementary").getByText("Содержание").click();
+async function navCounter(page: Page, lang: "ru" | "en" = "ru") {
+  await page
+    .getByRole("complementary")
+    .getByText(lang === "ru" ? "Содержание" : "Contents")
+    .click();
   return page
-    .getByRole("navigation", { name: "Программа" })
+    .getByRole("navigation", {
+      name: lang === "ru" ? "Программа" : "Programme",
+    })
     .locator("summary", { hasText: MODULE })
     .getByText(/^\d+\/\d+$/);
 }
@@ -105,4 +110,27 @@ test("an English lesson has an English title and toggles to its Russian twin and
 test("an unknown language is a 404", async ({ page }) => {
   const res = await page.goto("de/");
   expect(res?.status()).toBe(404);
+});
+
+test("a mark survives switching the language and a reload", async ({
+  page,
+}) => {
+  await page.goto(LESSON);
+  await page.getByRole("button", { name: "Отметить пройденным" }).click();
+  await expect(
+    page.getByRole("button", { name: "Снять отметку" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("navigation", { name: "Язык материала" })
+    .getByRole("link", { name: "EN" })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`${EN_LESSON}$`));
+  // Right after the navigation: the same store, no flash of an unmarked lesson.
+  await expect(page.getByRole("button", { name: "Unmark" })).toBeVisible();
+  await expect(await navCounter(page, "en")).toHaveText(/^1\//);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Unmark" })).toBeVisible();
+  await expect(await navCounter(page, "en")).toHaveText(/^1\//);
 });

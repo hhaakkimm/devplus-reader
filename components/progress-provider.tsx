@@ -11,15 +11,18 @@ import {
 } from "react";
 import { getWebApp } from "@/lib/telegram";
 import { localKV, cloudKV } from "@/lib/progress/storage";
-import {
-  createStore,
-  type ProgressStore,
-  type Snapshot,
-} from "@/lib/progress/store";
+import { createStoreHolder } from "@/lib/progress/singleton";
+import { createStore, type Snapshot } from "@/lib/progress/store";
 
 // Server HTML and the first client render show no progress; it appears after the store loads.
 const EMPTY: Snapshot = { done: {}, quizzes: {} };
 const noop = () => () => {};
+
+const holder = createStoreHolder(() =>
+  createStore(localKV, cloudKV(getWebApp()), () =>
+    Math.floor(Date.now() / 1000),
+  ),
+);
 
 type Progress = {
   ready: boolean; // the store exists: marks made before are not lost
@@ -43,17 +46,18 @@ export function ProgressProvider({
   quizKeys: string[]; // "<module>-<quiz>"
   children: React.ReactNode;
 }) {
-  // Created in the browser only: Telegram.WebApp does not exist on the server.
-  const [store, setStore] = useState<ProgressStore | null>(null);
+  // On a remount (language toggle) the store already exists and is shown at once; on the first
+  // mount, and during server render, there is none, so server HTML and hydration match.
+  const [store, setStore] = useState(holder.peek);
+  const key = `${modules.join("|")}#${quizKeys.join("|")}`;
   useEffect(() => {
-    const s = createStore(localKV, cloudKV(getWebApp()), () =>
-      Math.floor(Date.now() / 1000),
-    );
-    // The store needs the browser (Telegram.WebApp), so it cannot exist during render.
+    // The store needs the browser (Telegram.WebApp), so it cannot be created during render.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setStore(s);
-    void s.load(modules, quizKeys);
-  }, [modules, quizKeys]);
+    setStore(holder.get());
+    holder.loadOnce(modules, quizKeys);
+    // `key` stands for the contents of the arrays: the server layout builds new ones on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
 
   const snap = useSyncExternalStore(
     store ? store.subscribe : noop,
