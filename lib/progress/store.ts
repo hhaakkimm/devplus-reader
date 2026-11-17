@@ -67,15 +67,36 @@ export function createStore(
     notify();
   };
 
-  // Write path: read `keys` from the cloud, let `build` merge them into the snapshot and
-  // return the entries to store, then write local first and cloud second. Nothing is thrown.
-  // A failed cloud read means the cloud is never written (it would be overwritten blind) and
-  // synced goes false; a cloud write failure also flips synced. A fully successful cloud
-  // round trip sets it back to true.
+  const readLocal = (keys: string[]) =>
+    local.get(keys).catch(() => ({}) as Record<string, string>);
+  const writeLocal = async (entries: Record<string, string>) => {
+    for (const [k, v] of Object.entries(entries)) {
+      try {
+        await local.set(k, v);
+      } catch {
+        // localKV swallows its own errors; a foreign KV must not break the UI either
+      }
+    }
+  };
+
+  // Write path: `build` merges what a KV holds into the snapshot and returns the entries to
+  // store. Two steps:
+  // 1. at once, outside the queue: merge localStorage's current content and write it back, so the
+  //    mark survives closing the app before the (slow) CloudStorage round trip finishes, and a
+  //    stale tab never overwrites another tab's marks or lowers a quiz result. `build` is
+  //    idempotent, so running it again in step 2 is safe. Does not touch synced.
+  // 2. queued: read the cloud, merge, write local again (re-reading it, another tab may have written
+  //    meanwhile) and then the cloud. A failed cloud read means the cloud is never written (it would
+  //    be overwritten blind) and synced goes false; a cloud write failure also flips synced. A fully
+  //    successful cloud round trip sets it back to true. Nothing is thrown.
+  // shortcut: a tap during load's write-back loop can be overwritten locally until its queued persist runs, add a local lock if that matters.
   function persist(
     keys: string[],
-    build: (cloudRaw: Record<string, string>) => Record<string, string>,
+    build: (raw: Record<string, string>) => Record<string, string>,
   ): Promise<void> {
+    void readLocal(keys)
+      .then((l) => writeLocal(build(l)))
+      .catch(() => undefined);
     return enqueue(async () => {
       let raw: Record<string, string> = {};
       let ok = true;
@@ -86,14 +107,9 @@ export function createStore(
           ok = false;
         }
       }
+      build(await readLocal(keys)); // folds other tabs' writes into the snapshot
       const entries = build(raw);
-      for (const [k, v] of Object.entries(entries)) {
-        try {
-          await local.set(k, v);
-        } catch {
-          // localKV swallows its own errors; a foreign KV must not break the UI either
-        }
-      }
+      await writeLocal(entries);
       if (!cloud) return;
       if (ok) {
         for (const [k, v] of Object.entries(entries)) {

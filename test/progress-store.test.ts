@@ -481,6 +481,121 @@ describe("createStore: merge on write", () => {
   });
 });
 
+describe("createStore: local write does not wait for the cloud or for other tabs", () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it("a mark reaches local while cloud.get is still pending (mark, then close)", async () => {
+    const local = fake();
+    const { kv, release } = slow(fake());
+    const store = createStore(local, kv, clock(1000));
+    const marking = store.markLesson("m", "a", true);
+    const saving = store.saveQuiz("m", "q", 3, 5);
+    await tick();
+    expect(JSON.parse(local.data["done-m"])).toEqual({ a: 1000 });
+    expect(local.data["quiz-m-q"]).toBe("3/5");
+    release();
+    await Promise.all([marking, saving]);
+    expect(JSON.parse(local.data["done-m"])).toEqual({ a: 1000 });
+  });
+
+  it("the immediate local write does not touch synced", async () => {
+    const { kv, release } = slow(fake());
+    const store = createStore(fake(), kv, clock());
+    const seen: boolean[] = [];
+    store.subscribe(() => seen.push(store.synced()));
+    const marking = store.markLesson("m", "a", true);
+    await tick();
+    expect(seen.every((v) => v)).toBe(true);
+    release();
+    await marking;
+  });
+
+  it("two stores on one local KV (two tabs) keep both marks", async () => {
+    const local = fake();
+    const a = createStore(local, null, clock(100));
+    const b = createStore(local, null, clock(200));
+    await a.markLesson("m", "x", true);
+    await b.markLesson("m", "y", true);
+    const want = { x: 100, y: 200 };
+    expect(JSON.parse(local.data["done-m"])).toEqual(want);
+    expect(b.getSnapshot().done.m).toEqual(want);
+  });
+
+  it("two tabs: a stale tab never lowers the best quiz result", async () => {
+    const local = fake();
+    const a = createStore(local, null, clock());
+    const b = createStore(local, null, clock());
+    await a.saveQuiz("m", "q", 5, 5);
+    await b.saveQuiz("m", "q", 2, 5);
+    expect(local.data["quiz-m-q"]).toBe("5/5");
+    expect(b.getSnapshot().quizzes["m-q"]).toBe("5/5");
+  });
+
+  it("interleaved with a slow cloud: both tabs' marks survive in local and cloud", async () => {
+    const local = fake();
+    const cloudBase = fake();
+    const { kv, release } = slow(cloudBase);
+    const a = createStore(local, kv, clock(100));
+    const b = createStore(local, kv, clock(200));
+    const ma = a.markLesson("m", "x", true);
+    await tick();
+    const mb = b.markLesson("m", "y", true);
+    await tick();
+    expect(JSON.parse(local.data["done-m"])).toEqual({ x: 100, y: 200 });
+    release();
+    await Promise.all([ma, mb]);
+    const want = { x: 100, y: 200 };
+    expect(JSON.parse(local.data["done-m"])).toEqual(want);
+    expect(JSON.parse(cloudBase.data["done-m"])).toEqual(want);
+  });
+
+  it("a failing local get or set does not break marking", async () => {
+    const local = fake();
+    local.failGet = true;
+    local.failSet = true;
+    const cloud = fake();
+    const store = createStore(local, cloud, clock());
+    await expect(store.markLesson("m", "a", true)).resolves.toBeUndefined();
+    expect(JSON.parse(cloud.data["done-m"])).toEqual({ a: 1000 });
+  });
+});
+
+describe("createStore with the real cloudKV: an over-long quiz key", () => {
+  it("is skipped while the rest still loads and syncs", async () => {
+    const longQuiz = `${"q".repeat(130)}`;
+    const items: Record<string, string> = { "done-m": '{"c":6}' };
+    const asked: string[][] = [];
+    const tg = {
+      CloudStorage: {
+        getItems: (
+          keys: string[],
+          cb: (e: string | null, v?: Record<string, string>) => void,
+        ) => {
+          asked.push(keys);
+          if (keys.some((k) => k.length > 128)) return cb("KEY_TOO_LONG");
+          cb(null, Object.fromEntries(keys.map((k) => [k, items[k] ?? ""])));
+        },
+        setItem: (
+          k: string,
+          v: string,
+          cb: (e: string | null, ok?: boolean) => void,
+        ) => {
+          items[k] = v;
+          cb(null, true);
+        },
+      },
+    } as unknown as TelegramWebApp;
+    const local = fake({ "done-m": '{"l":5}', [`quiz-m-${longQuiz}`]: "1/2" });
+    const store = createStore(local, cloudKV(tg), clock());
+    const snap = await store.load(["m"], [`m-${longQuiz}`, "m-ok"]);
+    expect(snap.done.m).toEqual({ l: 5, c: 6 });
+    expect(snap.quizzes[`m-${longQuiz}`]).toBe("1/2"); // local still serves it
+    expect(asked.flat().every((k) => k.length <= 128)).toBe(true);
+    expect(JSON.parse(items["done-m"])).toEqual({ l: 5, c: 6 });
+    expect(store.synced()).toBe(true);
+  });
+});
+
 describe("createStore.subscribe / getSnapshot", () => {
   it("notifies on changes, stops after unsubscribe, snapshot is stable between changes", async () => {
     const store = createStore(fake(), fake(), clock());
@@ -586,6 +701,33 @@ describe("cloudKV", () => {
     const kv = cloudKV(tg({ getItems, setItem: vi.fn() }))!;
     expect(await kv.get(["a", "b"])).toEqual({ a: "v" });
     expect(getItems.mock.calls[0][0]).toEqual(["a", "b"]);
+  });
+
+  it("never requests a key CloudStorage would reject (over 128 chars or bad characters)", async () => {
+    const long = `quiz-m-${"x".repeat(122)}`; // 129 chars
+    const ok128 = `quiz-m-${"x".repeat(121)}`; // 128 chars
+    expect(long).toHaveLength(129);
+    expect(ok128).toHaveLength(128);
+    const getItems = vi.fn((keys: string[], cb: Cb<Record<string, string>>) =>
+      cb(null, Object.fromEntries(keys.map((k) => [k, "v"]))),
+    );
+    const kv = cloudKV(tg({ getItems, setItem: vi.fn() }))!;
+    expect(await kv.get(["a", long, "b.c", "d e", ok128, ""])).toEqual({
+      a: "v",
+      [ok128]: "v",
+    });
+    expect(getItems.mock.calls[0][0]).toEqual(["a", ok128]);
+  });
+
+  it("does not call getItems when every key is invalid, and set skips an invalid key", async () => {
+    const getItems = vi.fn();
+    const setItem = vi.fn();
+    const kv = cloudKV(tg({ getItems, setItem }))!;
+    expect(await kv.get(["x".repeat(129)])).toEqual({});
+    await expect(kv.set("x".repeat(129), "1")).resolves.toBeUndefined();
+    await expect(kv.set("a b", "1")).resolves.toBeUndefined();
+    expect(getItems).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
   });
 
   it("does not call getItems for an empty key list", async () => {

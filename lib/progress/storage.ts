@@ -9,6 +9,11 @@ export interface KV {
 const PREFIX = "dpr:";
 const CLOUD_TIMEOUT_MS = 5000;
 
+// CloudStorage rejects a whole batch over one bad key: 1-128 characters of A-Z a-z 0-9 _ -.
+// Such a key is never sent (the value then lives in localStorage only).
+const validCloudKey = (k: string) =>
+  k.length <= 128 && /^[A-Za-z0-9_-]+$/.test(k);
+
 // localStorage can throw (private mode, blocked site data): reads give nothing, writes are dropped.
 export const localKV: KV = {
   async get(keys) {
@@ -56,7 +61,8 @@ export function cloudKV(tg: TelegramWebApp | null): KV | null {
   const cs = tg?.CloudStorage;
   if (!cs) return null;
   return {
-    async get(keys) {
+    async get(all) {
+      const keys = all.filter(validCloudKey);
       if (keys.length === 0) return {};
       const values = await callback<Record<string, string>>((cb) =>
         cs.getItems(keys, cb),
@@ -67,6 +73,7 @@ export function cloudKV(tg: TelegramWebApp | null): KV | null {
       );
     },
     async set(key, value) {
+      if (!validCloudKey(key)) return;
       await callback<boolean>((cb) => cs.setItem(key, value, cb));
     },
   };
