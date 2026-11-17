@@ -24,6 +24,8 @@ function build({ ru, en, extra }: { ru: number; en: number; extra: number }) {
     "en/index.html",
     "ru/quizzes/index.html",
     "en/quizzes/index.html",
+    "ru/guide/index.html",
+    "en/guide/index.html",
     "ru/quizzes/m/q/index.html",
     "en/quizzes/m/q/index.html",
     ".nojekyll",

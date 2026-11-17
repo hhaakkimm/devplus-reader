@@ -23,6 +23,7 @@ const ru = {
   next: "Следующий",
   quizQuestions: "Вопросов: {n}",
   quizzes: "Квизы",
+  guide: "Как пользоваться",
   quizzesIntro:
     "Любой квиз можно пройти в любой момент, читать статью для этого не нужно. Лучший результат сохраняется.",
   noQuizzes: "Квизов пока нет.",
@@ -72,6 +73,7 @@ const en: Record<Key, string> = {
   next: "Next",
   quizQuestions: "{n} questions",
   quizzes: "Quizzes",
+  guide: "How to use",
   quizzesIntro:
     "You can take any quiz at any time, no need to read the article first. Your best result is saved.",
   noQuizzes: "No quizzes yet.",

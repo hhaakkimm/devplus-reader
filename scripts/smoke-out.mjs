@@ -19,6 +19,8 @@ const required = [
   "en/index.html",
   "ru/quizzes/index.html",
   "en/quizzes/index.html",
+  "ru/guide/index.html",
+  "en/guide/index.html",
   ".nojekyll",
 ];
 const patterns = [];

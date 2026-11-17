@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { backVisible } from "@/lib/back-button";
 
 describe("backVisible", () => {
-  it("shows on lessons and quizzes of the current language", () => {
+  it("shows on lessons, quizzes and the guide of the current language", () => {
+    expect(backVisible("/ru/guide/", "ru")).toBe(true);
+    expect(backVisible("/en/guide", "en")).toBe(true);
     expect(backVisible("/ru/lessons/sd-prep/introduction/", "ru")).toBe(true);
     expect(backVisible("/en/quizzes/", "en")).toBe(true);
     expect(backVisible("/ru/quizzes/sd-prep/core-concepts/", "ru")).toBe(true);
