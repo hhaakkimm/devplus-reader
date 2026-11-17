@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 const MODULE = "Подготовка к system design";
@@ -517,5 +519,180 @@ test.describe("the Telegram bridge", () => {
     await expect(
       page.getByRole("button", { name: "Отметить пройденным" }),
     ).toBeEnabled({ timeout: 8000 });
+  });
+});
+
+// Seeds localStorage once per tab: a reload or a later goto keeps what the page wrote since.
+async function seed(page: Page, entries: Record<string, string>) {
+  await page.addInitScript((e) => {
+    if (!sessionStorage.getItem("seeded")) {
+      sessionStorage.setItem("seeded", "1");
+      for (const [k, v] of Object.entries(e)) localStorage.setItem(k, v);
+    }
+  }, entries);
+}
+
+const stored = (page: Page, key: string) =>
+  page.evaluate((k) => localStorage.getItem(k), key);
+
+const programmeCounter = (page: Page) =>
+  page
+    .getByRole("button", { name: new RegExp(MODULE) })
+    .getByText(/^\d+\/\d+$/);
+
+const DONE = "dpr:done-sd-prep";
+
+test.describe("wide content does not scroll the page sideways", () => {
+  // Real lessons: the widest table row, the longest code lines, many SVG illustrations.
+  const lessons = [
+    ["a wide table", "lessons/lld/problem-breakdowns-rate-limiter/", "table"],
+    [
+      "a seven-column table",
+      "lessons/ai-coding/problem-breakdowns-maximize-unique-chars/",
+      "table",
+    ],
+    [
+      "long code lines",
+      "lessons/key-technologies/time-series-databases/",
+      "pre",
+    ],
+    ["SVG images", "lessons/ml-design/core-concepts-embeddings/", "img"],
+  ] as const;
+  for (const lang of ["ru", "en"]) {
+    for (const [name, url, selector] of lessons) {
+      test(`${lang}: ${name}`, async ({ page }) => {
+        await page.goto(`${lang}/${url}`);
+        await expect(
+          page.locator(`article ${selector}`).first(),
+        ).toBeAttached();
+        expect(await noHorizontalScroll(page)).toBe(true);
+      });
+    }
+  }
+
+  // Every built lesson page of both languages, read from out/ (what the server serves).
+  test("every lesson page of both languages", async ({ page }) => {
+    const pages: string[] = [];
+    for (const lang of ["ru", "en"]) {
+      const root = path.resolve("out", lang, "lessons");
+      for (const mod of readdirSync(root, { withFileTypes: true })) {
+        if (!mod.isDirectory()) continue;
+        for (const lesson of readdirSync(path.join(root, mod.name), {
+          withFileTypes: true,
+        })) {
+          if (lesson.isDirectory())
+            pages.push(`${lang}/lessons/${mod.name}/${lesson.name}/`);
+        }
+      }
+    }
+    expect(pages.length).toBeGreaterThan(250);
+    test.setTimeout(pages.length * 2000 + 30_000);
+
+    const offenders: string[] = [];
+    for (const url of pages) {
+      await page.goto(url);
+      const [scroll, inner] = await page.evaluate(() => [
+        document.documentElement.scrollWidth,
+        window.innerWidth,
+      ]);
+      if (scroll > inner) offenders.push(`${url} (${scroll} > ${inner})`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
+test.describe("hostile storage", () => {
+  const garbage = [
+    "not json {",
+    "[1,2,3]",
+    '{"introduction":"x"}',
+    '{"introduction":"NaN"}',
+    '{"introduction":1e999}',
+    "null",
+    '"a string"',
+  ];
+  for (const value of garbage) {
+    test(`a garbage done value ${value} is ignored and then replaced by a valid one`, async ({
+      page,
+    }) => {
+      await seed(page, { [DONE]: value });
+      await page.goto("ru/");
+      await expect(programmeCounter(page)).toHaveText(/^0\/\d+$/);
+
+      await page.goto(LESSON);
+      const mark = page.getByRole("button", { name: "Отметить пройденным" });
+      await expect(mark).toBeEnabled();
+      await mark.click();
+      await expect(
+        page.getByRole("button", { name: "Снять отметку" }),
+      ).toBeVisible();
+      await expect
+        .poll(async () => {
+          const raw = await stored(page, DONE);
+          try {
+            return (JSON.parse(raw ?? "") as Record<string, number>)
+              .introduction;
+          } catch {
+            return undefined;
+          }
+        })
+        .toBeGreaterThan(0);
+
+      await page.goto("ru/");
+      await expect(programmeCounter(page)).toHaveText(/^1\/\d+$/);
+    });
+  }
+
+  test("a mark for a lesson that no longer exists is neither counted nor erased", async ({
+    page,
+  }) => {
+    const stale = 1700000000;
+    await seed(page, {
+      [DONE]: JSON.stringify({ "no-such-lesson": stale, introduction: stale }),
+    });
+    await page.goto("ru/");
+    // 1, not 2: only the real lesson counts.
+    await expect(programmeCounter(page)).toHaveText(/^1\/\d+$/);
+
+    await page.goto("ru/lessons/sd-prep/how-to-prepare/");
+    const mark = page.getByRole("button", { name: "Отметить пройденным" });
+    await expect(mark).toBeEnabled();
+    await mark.click();
+    await expect(
+      page.getByRole("button", { name: "Снять отметку" }),
+    ).toBeVisible();
+    await expect
+      .poll(
+        async () =>
+          JSON.parse((await stored(page, DONE)) ?? "{}")["how-to-prepare"],
+      )
+      .toBeGreaterThan(0);
+    const after = JSON.parse((await stored(page, DONE))!);
+    expect(after["no-such-lesson"]).toBe(stale);
+    expect(after.introduction).toBe(stale);
+
+    await page.goto("ru/");
+    await expect(programmeCounter(page)).toHaveText(/^2\/\d+$/);
+  });
+
+  test("a stored result for a quiz that is gone is ignored, one for a changed quiz is shown as stored", async ({
+    page,
+  }) => {
+    await seed(page, {
+      "dpr:quiz-sd-prep-gone": "3/5",
+      "dpr:quiz-sd-prep-core-concepts": "3/5",
+    });
+    for (const [url, text] of [
+      ["ru/quizzes/", "лучший результат 3 из 5"],
+      ["en/quizzes/", "best result 3 of 5"],
+    ]) {
+      await page.goto(url);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // The quiz has 15 questions now; the stored 3/5 is shown as is, and only once.
+      await expect(page.getByText(text)).toHaveCount(1);
+      await expect(page.getByText(/gone/i)).toHaveCount(0);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    }
+    expect(await stored(page, "dpr:quiz-sd-prep-gone")).toBe("3/5");
   });
 });
