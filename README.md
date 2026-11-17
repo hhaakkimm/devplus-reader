@@ -11,6 +11,7 @@ pnpm dev           # dev-сервер
 env -u NODE_ENV pnpm build   # статическая сборка в out/
 pnpm test          # vitest
 pnpm lint          # eslint + tsc --noEmit
+pnpm e2e           # Playwright против out/ на :3100 (сначала сборка)
 pnpm sync-assets   # копирует ../devplus/apps/web/public/content в public/content
 ```
 

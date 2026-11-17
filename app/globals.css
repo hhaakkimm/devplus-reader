@@ -173,3 +173,7 @@
 .article blockquote p::after {
   content: none;
 }
+/* a long unbreakable token (a URL, a query string) would push the page wider than a phone */
+.article {
+  overflow-wrap: break-word;
+}
