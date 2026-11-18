@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProgress } from "@/components/progress-provider";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/native-select";
 import { Progress } from "@/components/ui/progress";
 import { fill, t, type Lang } from "@/lib/i18n";
+import { saveRun, takeRun } from "@/lib/quiz-carry";
 import {
   canCheck,
   initialAnswer,
@@ -195,15 +196,20 @@ function QuestionBody({
 export function QuizRunner({ quiz, lang }: { quiz: Quiz; lang: Lang }) {
   const { saveQuiz } = useProgress();
   const all = quiz.questions.map((_, i) => i);
-  const [queue, setQueue] = useState(all);
-  const [fullPass, setFullPass] = useState(true);
-  const [pos, setPos] = useState(0);
+  // Set when the language was just switched on this quiz: continue where the reader was.
+  const [carried] = useState(() => takeRun(quiz.slug, lang));
+  const [queue, setQueue] = useState(carried?.queue ?? all);
+  const [fullPass, setFullPass] = useState(carried?.fullPass ?? true);
+  const [pos, setPos] = useState(carried?.pos ?? 0);
   const [answer, setAnswer] = useState<Answer>(() =>
-    initialAnswer(quiz.questions[0]),
+    initialAnswer(quiz.questions[carried ? carried.queue[carried.pos] : 0]),
   );
   const [checked, setChecked] = useState(false);
-  const [wrong, setWrong] = useState<number[]>([]);
-  const [done, setDone] = useState(false);
+  const [wrong, setWrong] = useState<number[]>(carried?.wrong ?? []);
+  const [done, setDone] = useState(carried?.done ?? false);
+  useEffect(() => {
+    saveRun(quiz.slug, lang, { queue, fullPass, pos, wrong, done });
+  }, [quiz.slug, lang, queue, fullPass, pos, wrong, done]);
 
   function begin(next: number[], full: boolean) {
     setQueue(next);
